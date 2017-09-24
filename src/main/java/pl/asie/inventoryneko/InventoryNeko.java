@@ -21,6 +21,9 @@ package pl.asie.inventoryneko;
 
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Multimap;
+import com.google.gson.JsonDeserializationContext;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonSerializationContext;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockFlower;
 import net.minecraft.creativetab.CreativeTabs;
@@ -30,9 +33,14 @@ import net.minecraft.item.ItemFood;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.util.ResourceLocation;
+import net.minecraft.world.storage.loot.*;
+import net.minecraft.world.storage.loot.conditions.LootCondition;
+import net.minecraft.world.storage.loot.functions.LootFunction;
+import net.minecraft.world.storage.loot.functions.LootFunctionManager;
 import net.minecraftforge.common.DungeonHooks;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.common.config.Configuration;
+import net.minecraftforge.event.LootTableLoadEvent;
 import net.minecraftforge.event.RegistryEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.SidedProxy;
@@ -41,7 +49,9 @@ import net.minecraftforge.fml.common.event.FMLPreInitializationEvent;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.registry.ForgeRegistries;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @Mod(
@@ -52,6 +62,7 @@ import java.util.Map;
 )
 public class InventoryNeko {
 	public static final Map<String, NekoDefinition> NEKO = new HashMap<>();
+	public static final List<String> NEKO_POOL = new ArrayList<>();
 	public static final Map<String, NekoState> STATE = new HashMap<>();
 	public static ItemNeko itemNeko;
 
@@ -59,11 +70,16 @@ public class InventoryNeko {
 	public static ProxyCommon proxy;
 	public static Configuration config;
 
+	private boolean generateDungeons;
+
 	private static Multimap<String, Item> itemMultimap = HashMultimap.create();
 
-	public static void registerNeko(NekoDefinition definition) {
+	public static void registerNeko(NekoDefinition definition, int poolWeight) {
 		if ("neko".equals(definition.getName()) || config.getBoolean(definition.getName(), "enabled", true, "Is " + definition.getName() + " enabled?")) {
 			NEKO.put(definition.getName(), definition);
+			for (int i = 0; i < poolWeight; i++) {
+				NEKO_POOL.add(definition.getName());
+			}
 		}
 	}
 
@@ -133,11 +149,11 @@ public class InventoryNeko {
 	public void onPreInit(FMLPreInitializationEvent event) {
 		config = new Configuration(event.getSuggestedConfigurationFile());
 
-		registerNeko(new NekoDefinition("neko", 250, InventoryNeko::isFood));
-		registerNeko(new NekoDefinition("tora", "neko", 250, InventoryNeko::isFood));
-		registerNeko(new NekoDefinition("dog", 250, InventoryNeko::isFood));
-		registerNeko(new NekoDefinition("sakura", 250, InventoryNeko::isFlower));
-		registerNeko(new NekoDefinition("tomoyo", 250, InventoryNeko::isFlower));
+		registerNeko(new NekoDefinition("neko", 250, InventoryNeko::isFood), 6);
+		registerNeko(new NekoDefinition("tora", "neko", 250, InventoryNeko::isFood), 2);
+		registerNeko(new NekoDefinition("dog", 250, InventoryNeko::isFood), 2);
+		registerNeko(new NekoDefinition("sakura", 250, InventoryNeko::isFlower), 1);
+		registerNeko(new NekoDefinition("tomoyo", 250, InventoryNeko::isFlower), 1);
 
 		registerState(new NekoState("awake", 1, 3));
 		registerState(new NekoState("dtogi", 2, 10));
@@ -161,12 +177,27 @@ public class InventoryNeko {
 
 		itemNeko = new ItemNeko();
 		itemNeko.setCreativeTab(CreativeTabs.MISC);
+		itemNeko.setMaxStackSize(1);
 		itemNeko.setRegistryName("inventoryneko:neko");
 		itemNeko.setUnlocalizedName("inventoryneko.neko");
 
 		MinecraftForge.EVENT_BUS.register(this);
 		MinecraftForge.EVENT_BUS.register(new NekoInventoryTicker());
 		MinecraftForge.EVENT_BUS.register(proxy);
+
+		generateDungeons = config.getBoolean("spawnInDungeons", "general", true, "Should nekos spawn in dungeons?");
+
+		LootTableList.register(new ResourceLocation("inventoryneko", "inject/simple_dungeon"));
+		LootFunctionManager.registerFunction(new LootFunctionRandomizeNeko.Serializer(new ResourceLocation("inventoryneko", "randomize_neko")));
+	}
+
+	@SubscribeEvent
+	public void lootLoad(LootTableLoadEvent evt) {
+		if (generateDungeons && evt.getName().toString().equals("minecraft:chests/simple_dungeon")) {
+			LootEntry entry = new LootEntryTable(new ResourceLocation("inventoryneko", "inject/simple_dungeon"), 1, 0, new LootCondition[0], "inventoryneko:neko_dungeon_inject"); // weight doesn't matter since it's the only entry in the pool. Other params set as you wish.
+			LootPool pool = new LootPool(new LootEntry[] {entry}, new LootCondition[0], new RandomValueRange(1), new RandomValueRange(0), "inventoryneko:neko_dungeon_inject_pool"); // Other params set as you wish.
+			evt.getTable().addPool(pool);
+		}
 	}
 
 	@Mod.EventHandler

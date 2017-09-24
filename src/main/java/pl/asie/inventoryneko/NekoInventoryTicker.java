@@ -22,12 +22,14 @@ package pl.asie.inventoryneko;
 import com.google.common.collect.Sets;
 import gnu.trove.map.TIntObjectMap;
 import gnu.trove.map.hash.TIntObjectHashMap;
+import net.minecraft.entity.item.EntityItem;
 import net.minecraft.entity.item.EntityItemFrame;
 import net.minecraft.entity.player.InventoryPlayer;
 import net.minecraft.inventory.*;
 import net.minecraft.item.ItemStack;
 import net.minecraft.world.World;
 import net.minecraftforge.event.entity.EntityJoinWorldEvent;
+import net.minecraftforge.event.entity.item.ItemTossEvent;
 import net.minecraftforge.event.world.WorldEvent;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
@@ -63,6 +65,18 @@ public class NekoInventoryTicker {
 			}
 
 			itemFrames.get(event.getWorld()).add((EntityItemFrame) event.getEntity());
+		}
+	}
+
+	@SubscribeEvent
+	public void onEntityToss(ItemTossEvent event) {
+		if (event.getEntityItem() != null) {
+			EntityItem item = event.getEntityItem();
+			ItemStack stack = item.getItem();
+			if (!stack.isEmpty() && stack.getItem() == InventoryNeko.itemNeko) {
+				InventoryNeko.getOrCreateTagCompound(stack).setString("state", "sleep");
+				InventoryNeko.getOrCreateTagCompound(stack).setInteger("tick", 0);
+			}
 		}
 	}
 
