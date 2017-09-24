@@ -1,0 +1,11 @@
+This license concerns files under the following directories:
+- src/main/resources/assets/inventoryneko/bitmaps
+- src/main/resources/assets/inventoryneko/bitmasks
+
+oneko
+
+Copyright (c) 1990 Tatsuya Kato (kato@ntts.co.jp)
+Copyright (c) 1990 Kiichiroh Mukose
+
+The (Japanese) README file, as well as the LSM file originally distributed
+with oneko on sunsite both say that oneko is public domain software.
