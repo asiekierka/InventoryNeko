@@ -22,20 +22,72 @@ package pl.asie.inventoryneko;
 import com.google.common.collect.Sets;
 import gnu.trove.map.TIntObjectMap;
 import gnu.trove.map.hash.TIntObjectHashMap;
+import net.minecraft.entity.item.EntityItemFrame;
 import net.minecraft.entity.player.InventoryPlayer;
 import net.minecraft.inventory.*;
 import net.minecraft.item.ItemStack;
+import net.minecraft.world.World;
+import net.minecraftforge.event.entity.EntityJoinWorldEvent;
+import net.minecraftforge.event.world.WorldEvent;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
 import net.minecraftforge.items.SlotItemHandler;
+import org.apache.commons.lang3.tuple.Pair;
 
-import java.util.ArrayList;
-import java.util.IdentityHashMap;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 public class NekoInventoryTicker {
+	private Map<World, List<EntityItemFrame>> itemFrames = new HashMap<>();
+
 	private Set<Object> checkedInventories = Sets.newSetFromMap(new IdentityHashMap<>());
+
+	@SubscribeEvent
+	public void onWorldLoad(WorldEvent.Load event) {
+		if (event.getWorld().isRemote) return;
+	}
+
+	@SubscribeEvent
+	public void onWorldUnload(WorldEvent.Unload event) {
+		if (event.getWorld().isRemote) return;
+
+		itemFrames.remove(event.getWorld());
+	}
+
+	@SubscribeEvent
+	public void onEntityJoinWorld(EntityJoinWorldEvent event) {
+		if (event.getWorld().isRemote) return;
+
+		if (event.getEntity() instanceof EntityItemFrame) {
+			if (!itemFrames.containsKey(event.getWorld())) {
+				itemFrames.put(event.getWorld(), new LinkedList<>());
+			}
+
+			itemFrames.get(event.getWorld()).add((EntityItemFrame) event.getEntity());
+		}
+	}
+
+	@SubscribeEvent
+	public void onWorldTick(TickEvent.WorldTickEvent event) {
+		if (event.phase == TickEvent.Phase.END && !event.world.isRemote) {
+			List<EntityItemFrame> list = itemFrames.get(event.world);
+			if (list != null) {
+				Iterator<EntityItemFrame> iterator = list.iterator();
+				while (iterator.hasNext()) {
+					EntityItemFrame frame = iterator.next();
+					if (frame.isDead) {
+						iterator.remove();
+					} else {
+						ItemStack stack = frame.getDisplayedItem();
+						if (stack.getItem() == InventoryNeko.itemNeko) {
+							// TODO: Add item frame logic proxying.
+							InventoryNeko.getOrCreateTagCompound(stack).setString("state", "sleep");
+							InventoryNeko.getOrCreateTagCompound(stack).setInteger("tick", 0);
+						}
+					}
+				}
+			}
+		}
+	}
 
 	@SubscribeEvent
 	public void onServerTick(TickEvent.ServerTickEvent event) {

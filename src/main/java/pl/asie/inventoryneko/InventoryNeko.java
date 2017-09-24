@@ -19,16 +19,27 @@
 
 package pl.asie.inventoryneko;
 
+import com.google.common.collect.HashMultimap;
+import com.google.common.collect.Multimap;
+import net.minecraft.block.Block;
+import net.minecraft.block.BlockFlower;
 import net.minecraft.creativetab.CreativeTabs;
+import net.minecraft.init.Items;
 import net.minecraft.item.Item;
+import net.minecraft.item.ItemFood;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
+import net.minecraft.util.ResourceLocation;
+import net.minecraftforge.common.DungeonHooks;
 import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.common.config.Configuration;
 import net.minecraftforge.event.RegistryEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.SidedProxy;
+import net.minecraftforge.fml.common.event.FMLInitializationEvent;
 import net.minecraftforge.fml.common.event.FMLPreInitializationEvent;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
+import net.minecraftforge.fml.common.registry.ForgeRegistries;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -46,9 +57,14 @@ public class InventoryNeko {
 
 	@SidedProxy(modId = "inventoryneko", clientSide = "pl.asie.inventoryneko.ProxyClient", serverSide = "pl.asie.inventoryneko.ProxyCommon")
 	public static ProxyCommon proxy;
+	public static Configuration config;
+
+	private static Multimap<String, Item> itemMultimap = HashMultimap.create();
 
 	public static void registerNeko(NekoDefinition definition) {
-		NEKO.put(definition.getName(), definition);
+		if ("neko".equals(definition.getName()) || config.getBoolean(definition.getName(), "enabled", true, "Is " + definition.getName() + " enabled?")) {
+			NEKO.put(definition.getName(), definition);
+		}
 	}
 
 	public static void registerState(NekoState animation) {
@@ -69,13 +85,59 @@ public class InventoryNeko {
 		return Integer.compare(v, 0);
 	}
 
+	public static boolean isFood(ItemStack stack) {
+		if (stack.getItem() instanceof ItemFood) {
+			return true;
+		}
+
+		if (stack.getItem() == Items.CAKE) {
+			return true;
+		}
+
+		if (itemMultimap.get("food").contains(stack.getItem())) {
+			return true;
+		}
+
+		return false;
+	}
+
+	public static boolean isFlower(ItemStack stack) {
+		if (Block.getBlockFromItem(stack.getItem()) instanceof BlockFlower) {
+			return true;
+		}
+
+		if (stack.getItem() == Items.CAKE) {
+			return true;
+		}
+
+		if (itemMultimap.get("flower").contains(stack.getItem())) {
+			return true;
+		}
+
+		return false;
+	}
+
+	private void addItems(String name) {
+		String[] items = config.getStringList(name, "customItems", new String[0], "Use registry names.");
+		for (String s : items) {
+			if (s.indexOf(':') >= 0) {
+				ResourceLocation loc = new ResourceLocation(s);
+				if (ForgeRegistries.ITEMS.containsKey(loc)) {
+					itemMultimap.put(name, ForgeRegistries.ITEMS.getValue(loc));
+				}
+			}
+		}
+	}
+
 	@Mod.EventHandler
 	public void onPreInit(FMLPreInitializationEvent event) {
-		registerNeko(new NekoDefinition("neko", 250));
-		registerNeko(new NekoDefinition("tora", "neko", 250));
-		registerNeko(new NekoDefinition("dog", 250));
-		registerNeko(new NekoDefinition("sakura", 250));
-		registerNeko(new NekoDefinition("tomoyo", 250));
+		config = new Configuration(event.getSuggestedConfigurationFile());
+
+		registerNeko(new NekoDefinition("neko", 250, InventoryNeko::isFood));
+		registerNeko(new NekoDefinition("tora", "neko", 250, InventoryNeko::isFood));
+		registerNeko(new NekoDefinition("dog", 250, InventoryNeko::isFood));
+		registerNeko(new NekoDefinition("sakura", 250, InventoryNeko::isFlower));
+		registerNeko(new NekoDefinition("tomoyo", 250, InventoryNeko::isFlower));
 
 		registerState(new NekoState("awake", 1, 3));
 		registerState(new NekoState("dtogi", 2, 10));
@@ -105,6 +167,16 @@ public class InventoryNeko {
 		MinecraftForge.EVENT_BUS.register(this);
 		MinecraftForge.EVENT_BUS.register(new NekoInventoryTicker());
 		MinecraftForge.EVENT_BUS.register(proxy);
+	}
+
+	@Mod.EventHandler
+	public void onInit(FMLInitializationEvent event) {
+		addItems("food");
+		addItems("flower");
+
+		if (config.hasChanged()) {
+			config.save();
+		}
 	}
 
 	@SubscribeEvent

@@ -22,16 +22,14 @@ package pl.asie.inventoryneko;
 import net.minecraft.creativetab.CreativeTabs;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.player.EntityPlayer;
-import net.minecraft.init.Items;
 import net.minecraft.item.Item;
-import net.minecraft.item.ItemFood;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.util.NonNullList;
 import net.minecraft.world.World;
 import net.minecraftforge.common.util.FakePlayer;
 
-import java.util.Random;
+import java.util.*;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 
@@ -69,22 +67,68 @@ public class ItemNeko extends Item {
 		return Math.sqrt(xDiff * xDiff + yDiff * yDiff);
 	}
 
-	private int findAttractiveSlot(int slotWidth, int slotHeight, int slotPosition, Function<Integer, ItemStack> stackGetter) {
-		int r = -1;
-		double distance = Double.MAX_VALUE;
-
+	private int[] findNextSlot(NekoDefinition definition, int slotWidth, int slotHeight, int slotPosition, Function<Integer, ItemStack> stackGetter) {
+		int[] count = new int[slotWidth * slotHeight];
+		int[] from = new int[slotWidth * slotHeight];
 		for (int i = 0; i < slotWidth * slotHeight; i++) {
-			ItemStack stack = stackGetter.apply(i);
-			if (!stack.isEmpty() && (stack.getItem() instanceof ItemFood || stack.getItem() == Items.CAKE)) {
-				double dist2 = getDistance(i, slotPosition, slotWidth);
-				if (dist2 < distance) {
-					r = i;
-					distance = dist2;
+			from[i] = -1;
+		}
+
+		LinkedList<Integer> posQueue = new LinkedList<>();
+		posQueue.add(slotPosition);
+		from[slotPosition] = -2;
+
+		int lowestCount = Integer.MAX_VALUE;
+		int lowestPos = -1;
+
+		while (!posQueue.isEmpty()) {
+			int pos = posQueue.remove();
+
+			ItemStack stack = stackGetter.apply(pos);
+			if (pos != slotPosition && !stack.isEmpty()) {
+				if (definition.isInterestingStack(stack)) {
+					if (count[pos] < lowestCount) {
+						lowestCount = count[pos];
+						lowestPos = pos;
+					}
+				} else {
+					// no can do.
+				}
+			} else {
+				// can trespass
+				for (int y = (pos / slotWidth) - 1; y <= (pos / slotWidth) + 1; y++) {
+					for (int x = (pos % slotWidth) - 1; x <= (pos % slotWidth) + 1; x++) {
+						if (x >= 0 && y >= 0 && x < slotWidth && y < slotHeight) {
+							int posNew = y * slotWidth + x;
+							if (posNew != pos && (from[posNew] == -1 || (count[pos] + 1) < count[posNew])) {
+								ItemStack stackNew = stackGetter.apply(posNew);
+								if (definition.isInterestingStack(stackNew) && x != (pos % slotWidth) && y != (pos / slotWidth)) {
+									// must be adjacent to attracting stack
+									continue;
+								}
+
+								posQueue.add(posNew);
+								from[posNew] = pos;
+								count[posNew] = count[pos] + 1;
+							}
+						}
+					}
 				}
 			}
 		}
 
-		return r;
+		if (lowestPos < 0) {
+			return new int[]{-1, -1};
+		} else {
+			int p = lowestPos;
+			int[] p1 = new int[]{lowestPos, lowestPos};
+			while (from[p] != -2) {
+				p1[1] = p1[0];
+				p1[0] = p;
+				p = from[p];
+			}
+			return p1;
+		}
 	}
 
 	private boolean tryMove(ItemStack stack, int from, int to, Function<Integer, ItemStack> stackGetter, BiConsumer<Integer, ItemStack> stackSetter) {
@@ -112,15 +156,29 @@ public class ItemNeko extends Item {
 		boolean shouldChangeState = tick >= (state.getDuration(definition) - 1);
 
 		if (shouldChangeState) {
-			int slot = findAttractiveSlot(slotWidth, slotHeight, slotPosition, stackGetter);
-			if (slot < 0 || slot >= slotWidth*slotHeight) {
-				state = InventoryNeko.STATE.get("sleep");
+			int[] slot = findNextSlot(definition, slotWidth, slotHeight, slotPosition, stackGetter);
+			if (slot[0] < 0 || slot[0] >= slotWidth*slotHeight) {
+				if (!"sleep".equals(state.getName())) {
+					switch (random.nextInt(8)) {
+						case 1:
+						case 2:
+						case 7:
+							state = InventoryNeko.STATE.get("sleep");
+							break;
+						case 5:
+							state = InventoryNeko.STATE.get("mati3");
+							break;
+						default:
+							state = InventoryNeko.STATE.get("mati2");
+							break;
+					}
+				}
 			} else {
 				if (state.is("sleep")) {
 					state = InventoryNeko.STATE.get("awake");
 				} else {
-					double dist = getDistance(slot, slotPosition, slotWidth);
-					if (dist <= 1.0001d) {
+					ItemStack stackFound = stackGetter.apply(slot[0]);
+					if (definition.isInterestingStack(stackFound)) {
 						if (state.is("mati2")) {
 							switch (random.nextInt(40)) {
 								case 5:
@@ -139,29 +197,33 @@ public class ItemNeko extends Item {
 							}
 						}
 					} else {
-						int xDiff = (slot % slotWidth) - (slotPosition % slotWidth);
-						int yDiff = (slot / slotWidth) - (slotPosition / slotWidth);
+						int xDiff = (slot[0] % slotWidth) - (slotPosition % slotWidth);
+						int yDiff = (slot[0] / slotWidth) - (slotPosition / slotWidth);
 
-						if (xDiff > yDiff) {
-							if (tryMove(stack, slotPosition, slotPosition + InventoryNeko.sign(xDiff), stackGetter, stackSetter)) {
-								slotPosition = slotPosition + InventoryNeko.sign(xDiff);
-							}
-
-							if (tryMove(stack, slotPosition, slotPosition + InventoryNeko.sign(yDiff) * slotWidth, stackGetter, stackSetter)) {
-								slotPosition = slotPosition + InventoryNeko.sign(yDiff) * slotWidth;
-							}
+						if (tryMove(stack, slotPosition, slotPosition + InventoryNeko.sign(xDiff) + InventoryNeko.sign(yDiff) * slotWidth, stackGetter, stackSetter)) {
+							slotPosition = slotPosition + InventoryNeko.sign(xDiff) + InventoryNeko.sign(yDiff) * slotWidth;
 						} else {
-							if (tryMove(stack, slotPosition, slotPosition + InventoryNeko.sign(yDiff) * slotWidth, stackGetter, stackSetter)) {
-								slotPosition = slotPosition + InventoryNeko.sign(yDiff) * slotWidth;
-							}
+							if (xDiff > yDiff) {
+								if (tryMove(stack, slotPosition, slotPosition + InventoryNeko.sign(xDiff), stackGetter, stackSetter)) {
+									slotPosition = slotPosition + InventoryNeko.sign(xDiff);
+								}
 
-							if (tryMove(stack, slotPosition, slotPosition + InventoryNeko.sign(xDiff), stackGetter, stackSetter)) {
-								slotPosition = slotPosition + InventoryNeko.sign(xDiff);
+								if (tryMove(stack, slotPosition, slotPosition + InventoryNeko.sign(yDiff) * slotWidth, stackGetter, stackSetter)) {
+									slotPosition = slotPosition + InventoryNeko.sign(yDiff) * slotWidth;
+								}
+							} else {
+								if (tryMove(stack, slotPosition, slotPosition + InventoryNeko.sign(yDiff) * slotWidth, stackGetter, stackSetter)) {
+									slotPosition = slotPosition + InventoryNeko.sign(yDiff) * slotWidth;
+								}
+
+								if (tryMove(stack, slotPosition, slotPosition + InventoryNeko.sign(xDiff), stackGetter, stackSetter)) {
+									slotPosition = slotPosition + InventoryNeko.sign(xDiff);
+								}
 							}
 						}
 
-						xDiff = (slot % slotWidth) - (slotPosition % slotWidth);
-						yDiff = (slot / slotWidth) - (slotPosition / slotWidth);
+						xDiff = (slot[1] % slotWidth) - (slotPosition % slotWidth);
+						yDiff = (slot[1] / slotWidth) - (slotPosition / slotWidth);
 
 						if (xDiff < 0 && yDiff < 0) {
 							state = InventoryNeko.STATE.get("upleft");
@@ -200,11 +262,15 @@ public class ItemNeko extends Item {
 
 	@Override
 	public void onUpdate(ItemStack stack, World worldIn, Entity entityIn, int itemSlot, boolean isSelected) {
-		if (entityIn instanceof EntityPlayer && !(entityIn instanceof FakePlayer) && itemSlot < 36) {
+		// Creative mode inventories are bugged
+		if (entityIn instanceof EntityPlayer && !(entityIn instanceof FakePlayer) && !((EntityPlayer) entityIn).isCreative() && itemSlot >= 0 && itemSlot < 36) {
 			update(worldIn, stack, 9, 4, playerToView(itemSlot),
 					(i) -> ((EntityPlayer) entityIn).inventory.getStackInSlot(viewToPlayer(i)),
 					(i, s) -> ((EntityPlayer) entityIn).inventory.setInventorySlotContents(viewToPlayer(i), s)
 			);
+		} else {
+			InventoryNeko.getOrCreateTagCompound(stack).setString("state", "sleep");
+			InventoryNeko.getOrCreateTagCompound(stack).setInteger("tick", 0);
 		}
 	}
 

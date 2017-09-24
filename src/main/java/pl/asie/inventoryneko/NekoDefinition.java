@@ -19,20 +19,29 @@
 
 package pl.asie.inventoryneko;
 
-public class NekoDefinition {
-	private String name;
-	private String maskName;
-	private int tickTime;
+import net.minecraft.item.ItemStack;
 
-	public NekoDefinition(String name, int tickTime) {
-		this(name, name, tickTime);
+import java.util.function.Predicate;
+
+public class NekoDefinition {
+	private final Predicate<ItemStack> isInteresting;
+	private final String name;
+	private final String maskName;
+	private final int tickTime;
+
+	public NekoDefinition(String name, int tickTime, Predicate<ItemStack> isInteresting) {
+		this(name, name, tickTime, isInteresting);
 	}
 
-
-	public NekoDefinition(String name, String maskName, int tickTime) {
+	public NekoDefinition(String name, String maskName, int tickTime, Predicate<ItemStack> isInteresting) {
 		this.name = name;
 		this.maskName = maskName;
 		this.tickTime = tickTime;
+		this.isInteresting = isInteresting;
+	}
+
+	public boolean isInterestingStack(ItemStack stack) {
+		return !stack.isEmpty() && isInteresting.test(stack);
 	}
 
 	public String getName() {

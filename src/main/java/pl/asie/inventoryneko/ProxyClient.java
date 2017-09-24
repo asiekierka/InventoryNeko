@@ -40,20 +40,6 @@ public class ProxyClient extends ProxyCommon {
 	}
 
 
-	public void addTransformation(ImmutableMap.Builder<ItemCameraTransforms.TransformType, TRSRTransformation> transformMap, ItemCameraTransforms.TransformType type, TRSRTransformation transformation) {
-		transformMap.put(type, TRSRTransformation.blockCornerToCenter(transformation));
-	}
-
-	public void addThirdPersonTransformation(ImmutableMap.Builder<ItemCameraTransforms.TransformType, TRSRTransformation> transformMap, TRSRTransformation transformation) {
-		addTransformation(transformMap, ItemCameraTransforms.TransformType.THIRD_PERSON_RIGHT_HAND, transformation);
-		addTransformation(transformMap, ItemCameraTransforms.TransformType.THIRD_PERSON_LEFT_HAND,  toLeftHand(transformation));
-	}
-
-	public void addFirstPersonTransformation(ImmutableMap.Builder<ItemCameraTransforms.TransformType, TRSRTransformation> transformMap, TRSRTransformation transformation) {
-		addTransformation(transformMap, ItemCameraTransforms.TransformType.FIRST_PERSON_RIGHT_HAND, transformation);
-		addTransformation(transformMap, ItemCameraTransforms.TransformType.FIRST_PERSON_LEFT_HAND,  toLeftHand(transformation));
-	}
-
 	private static final TRSRTransformation flipX = new TRSRTransformation(null, null, new Vector3f(-1, 1, 1), null);
 
 	private static TRSRTransformation toLeftHand(TRSRTransformation transform) {
@@ -69,14 +55,17 @@ public class ProxyClient extends ProxyCommon {
 	}
 
 	public ImmutableMap<ItemCameraTransforms.TransformType, TRSRTransformation> getDefaultItemTransforms() {
-		ImmutableMap.Builder<ItemCameraTransforms.TransformType, TRSRTransformation> transformMapBuilder = ImmutableMap.builder();
 		TRSRTransformation thirdperson = getTransformation(0, 3, 1, 0, 0, 0, 0.55f);
 		TRSRTransformation firstperson = getTransformation(1.13f, 3.2f, 1.13f, 0, -90, 25, 0.68f);
-		addTransformation(transformMapBuilder, ItemCameraTransforms.TransformType.GROUND, getTransformation(0, 2, 0, 0, 0, 0, 0.5f));
-		addTransformation(transformMapBuilder, ItemCameraTransforms.TransformType.HEAD, getTransformation(0, 13, 7, 0, 180, 0, 1));
-		addThirdPersonTransformation(transformMapBuilder, thirdperson);
-		addFirstPersonTransformation(transformMapBuilder, firstperson);
-		return transformMapBuilder.build();
+		ImmutableMap.Builder<ItemCameraTransforms.TransformType, TRSRTransformation> builder = ImmutableMap.builder();
+		builder.put(ItemCameraTransforms.TransformType.GROUND,                  getTransformation(0, 2, 0, 0, 0, 0, 0.5f));
+		builder.put(ItemCameraTransforms.TransformType.HEAD,                    getTransformation(0, 13, 7, 0, 180, 0, 1));
+		builder.put(ItemCameraTransforms.TransformType.THIRD_PERSON_RIGHT_HAND, thirdperson);
+		builder.put(ItemCameraTransforms.TransformType.THIRD_PERSON_LEFT_HAND, toLeftHand(thirdperson));
+		builder.put(ItemCameraTransforms.TransformType.FIRST_PERSON_RIGHT_HAND, firstperson);
+		builder.put(ItemCameraTransforms.TransformType.FIRST_PERSON_LEFT_HAND, toLeftHand(firstperson));
+		builder.put(ItemCameraTransforms.TransformType.FIXED, getTransformation(0, 0, 0, 0, 180, 0, 1));
+		return builder.build();
 	}
 
 	@SubscribeEvent
